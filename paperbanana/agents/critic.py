@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Optional
 
 import structlog
@@ -22,8 +23,10 @@ class CriticAgent(BaseAgent):
     faithfulness, conciseness, readability, and aesthetic issues.
     """
 
-    def __init__(self, vlm_provider: VLMProvider, prompt_dir: str = "prompts"):
-        super().__init__(vlm_provider, prompt_dir)
+    def __init__(
+        self, vlm_provider: VLMProvider, prompt_dir: str = "prompts", prompt_recorder=None
+    ):
+        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
 
     @property
     def agent_name(self) -> str:
@@ -56,8 +59,10 @@ class CriticAgent(BaseAgent):
 
         prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
         template = self.load_prompt(prompt_type)
+        prompt_label = self._prompt_label_from_image_path(image_path) or "critic"
         prompt = self.format_prompt(
             template,
+            prompt_label=prompt_label,
             source_context=source_context,
             caption=caption,
             description=description,
@@ -85,6 +90,14 @@ class CriticAgent(BaseAgent):
             summary=critique.summary,
         )
         return critique
+
+    @staticmethod
+    def _prompt_label_from_image_path(image_path: str) -> str | None:
+        """Best-effort label (e.g. critic_iter_3) derived from output image filename."""
+        m = re.search(r"(?:diagram|plot)_iter_(\d+)\.", image_path)
+        if not m:
+            return None
+        return f"critic_iter_{m.group(1)}"
 
     def _parse_response(self, response: str) -> CritiqueResult:
         """Parse the VLM response into a CritiqueResult."""
