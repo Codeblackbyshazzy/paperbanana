@@ -722,7 +722,12 @@ class PaperBananaPipeline:
             refinement_iterations=len(iterations),
             seed=self.settings.seed,
             config_snapshot=self.settings.model_dump(
-                exclude={"google_api_key", "openai_api_key", "openrouter_api_key"}
+                exclude={
+                    "google_api_key",
+                    "openai_api_key",
+                    "openrouter_api_key",
+                    "anthropic_api_key",
+                }
             ),
         )
         metadata_dict = metadata.model_dump()
@@ -1350,7 +1355,12 @@ class PaperBananaPipeline:
             refinement_iterations=len(iterations),
             seed=self.settings.seed,
             config_snapshot=self.settings.model_dump(
-                exclude={"google_api_key", "openai_api_key", "openrouter_api_key"}
+                exclude={
+                    "google_api_key",
+                    "openai_api_key",
+                    "openrouter_api_key",
+                    "anthropic_api_key",
+                }
             ),
         )
 
@@ -1730,7 +1740,12 @@ class PaperBananaPipeline:
             refinement_iterations=start_iter + len(iterations),
             seed=self.settings.seed,
             config_snapshot=self.settings.model_dump(
-                exclude={"google_api_key", "openai_api_key", "openrouter_api_key"}
+                exclude={
+                    "google_api_key",
+                    "openai_api_key",
+                    "openrouter_api_key",
+                    "anthropic_api_key",
+                }
             ),
         )
 
