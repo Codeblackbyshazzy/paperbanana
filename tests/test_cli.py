@@ -1242,3 +1242,166 @@ def test_references_categories_json(tmp_path, monkeypatch):
     data = json.loads(result.output)
     assert data["nlp_language"] == 2
     assert data["vision_perception"] == 1
+
+
+# ── generate --continue-run output dir resolution (issue #217) ──────
+
+
+def _make_run_dir(base: Path, run_id: str = "run_20260518_190654_814b57") -> Path:
+    """Create a minimal resumable run directory under *base*."""
+    run_dir = base / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_input.json").write_text(
+        json.dumps(
+            {
+                "source_context": "Method text",
+                "communicative_intent": "Overview figure",
+                "diagram_type": "methodology",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "planning.json").write_text(
+        json.dumps({"optimized_description": "A described diagram"}),
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+def _fake_continue_pipeline(tmp_path: Path, captured: dict):
+    from paperbanana.core.types import GenerationOutput
+
+    class _FakePipeline:
+        def __init__(self, settings=None, **kwargs):
+            captured["settings"] = settings
+
+        async def continue_run(
+            self,
+            resume_state,
+            additional_iterations=None,
+            user_feedback=None,
+            progress_callback=None,
+        ):
+            captured["resume_state"] = resume_state
+            captured["user_feedback"] = user_feedback
+            out_path = tmp_path / "continued.png"
+            out_path.write_bytes(b"fake")
+            return GenerationOutput(
+                image_path=str(out_path),
+                description="continued",
+                iterations=[],
+                metadata={"run_id": resume_state.run_id},
+            )
+
+    return _FakePipeline
+
+
+def test_continue_run_with_custom_output_dir(tmp_path, monkeypatch):
+    """--continue-run finds the run under --output-dir, not just settings.output_dir."""
+    custom_out = tmp_path / "custom_out"
+    run_dir = _make_run_dir(custom_out)
+    captured: dict = {}
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline",
+        _fake_continue_pipeline(tmp_path, captured),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "--continue-run",
+            run_dir.name,
+            "--output-dir",
+            str(custom_out),
+            "--feedback",
+            "tweak the colours",
+        ],
+        terminal_width=HELP_TERMINAL_WIDTH,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Done!" in result.output
+    assert captured["resume_state"].run_id == run_dir.name
+    assert Path(captured["resume_state"].run_dir) == run_dir
+    assert captured["user_feedback"] == "tweak the colours"
+
+
+def test_continue_run_accepts_run_dir_path(tmp_path, monkeypatch):
+    """--continue-run accepts an absolute path to the run directory itself."""
+    run_dir = _make_run_dir(tmp_path / "elsewhere")
+    captured: dict = {}
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline",
+        _fake_continue_pipeline(tmp_path, captured),
+    )
+
+    result = runner.invoke(
+        app,
+        ["generate", "--continue-run", str(run_dir)],
+        terminal_width=HELP_TERMINAL_WIDTH,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["resume_state"].run_id == run_dir.name
+    assert Path(captured["resume_state"].run_dir) == run_dir
+
+
+def test_continue_latest_uses_custom_output_dir(tmp_path, monkeypatch):
+    """--continue (latest) resolves the run under --output-dir."""
+    custom_out = tmp_path / "custom_out"
+    run_dir = _make_run_dir(custom_out)
+    captured: dict = {}
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline",
+        _fake_continue_pipeline(tmp_path, captured),
+    )
+
+    result = runner.invoke(
+        app,
+        ["generate", "--continue", "--output-dir", str(custom_out)],
+        terminal_width=HELP_TERMINAL_WIDTH,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["resume_state"].run_id == run_dir.name
+
+
+def test_continue_run_missing_reports_searched_path(tmp_path):
+    """Missing run errors clearly with the directory that was searched."""
+    empty_out = tmp_path / "empty_out"
+    empty_out.mkdir()
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "--continue-run",
+            "run_missing",
+            "--output-dir",
+            str(empty_out),
+        ],
+        terminal_width=HELP_TERMINAL_WIDTH,
+    )
+
+    flat = result.output.replace("\n", "")
+    assert result.exit_code == 1
+    assert "Run directory not found" in flat
+    assert "run_missing" in flat
+    assert str(empty_out.resolve()) in flat
+
+
+def test_continue_run_missing_path_reports_resolved_path(tmp_path):
+    """A path-form --continue-run that doesn't exist errors with the resolved path."""
+    missing = tmp_path / "nowhere" / "run_x"
+
+    result = runner.invoke(
+        app,
+        ["generate", "--continue-run", str(missing)],
+        terminal_width=HELP_TERMINAL_WIDTH,
+    )
+
+    flat = result.output.replace("\n", "")
+    assert result.exit_code == 1
+    assert "Run directory not found" in flat
+    assert "run_x" in flat
