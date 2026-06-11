@@ -26,9 +26,11 @@ class GoogleImagenGen(ImageGenProvider):
         self,
         api_key: Optional[str] = None,
         model: str = "gemini-3-pro-image-preview",
+        base_url: Optional[str] = None,
     ):
         self._api_key = api_key
         self._model = model
+        self._base_url = base_url
         self._client = None
 
     @property
@@ -44,7 +46,10 @@ class GoogleImagenGen(ImageGenProvider):
             try:
                 from google import genai
 
-                self._client = genai.Client(api_key=self._api_key)
+                client_kwargs = {"api_key": self._api_key}
+                if self._base_url:
+                    client_kwargs["http_options"] = {"base_url": self._base_url}
+                self._client = genai.Client(**client_kwargs)
             except ImportError:
                 raise ImportError(
                     "google-genai is required for Google Imagen provider. "
@@ -98,6 +103,7 @@ class GoogleImagenGen(ImageGenProvider):
         height: int = 1024,
         seed: Optional[int] = None,
         aspect_ratio: Optional[str] = None,
+        quality: Optional[str] = None,
     ) -> Image.Image:
         from google.genai import types
 
@@ -132,13 +138,18 @@ class GoogleImagenGen(ImageGenProvider):
         for part in parts:
             if hasattr(part, "as_image"):
                 try:
-                    return part.as_image()
+                    img = part.as_image()
+                    if self.cost_tracker is not None:
+                        self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+                    return img
                 except Exception:
                     pass
             inline = getattr(part, "inline_data", None)
             if inline and getattr(inline, "data", None):
                 data = inline.data
                 image_bytes = base64.b64decode(data) if isinstance(data, str) else data
+                if self.cost_tracker is not None:
+                    self.cost_tracker.record_image_call(provider=self.name, model=self._model)
                 return Image.open(BytesIO(image_bytes))
 
         logger.error("No image data in Gemini response", model=self._model)

@@ -52,6 +52,7 @@ class ReferenceStore:
                     image_path=image_path,
                     category=item.get("category"),
                     aspect_ratio=item.get("aspect_ratio"),
+                    structure_hints=item.get("structure_hints"),
                 )
             )
 
@@ -67,6 +68,17 @@ class ReferenceStore:
         """Get reference examples filtered by category."""
         self._load()
         return [e for e in self._examples if e.category == category]
+
+    def get_by_categories(self, categories: list[str]) -> list[ReferenceExample]:
+        """Get reference examples filtered by multiple categories."""
+        self._load()
+        cat_set = set(categories)
+        return [e for e in self._examples if e.category in cat_set]
+
+    def available_categories(self) -> list[str]:
+        """Return sorted list of distinct categories in the store."""
+        self._load()
+        return sorted({e.category for e in self._examples if e.category})
 
     def get_by_id(self, example_id: str) -> Optional[ReferenceExample]:
         """Get a specific reference example by ID."""

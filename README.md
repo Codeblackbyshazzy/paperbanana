@@ -32,18 +32,33 @@
 > This project is **not affiliated with or endorsed by** the original authors or Google Research.
 > The implementation is based on the publicly available paper and may differ from the original system.
 
-An agentic framework for generating publication-quality academic diagrams and statistical plots from text descriptions. Supports OpenAI (GPT-5.2 + GPT-Image-1.5), Azure OpenAI / Foundry, and Google Gemini providers.
+An agentic framework for generating publication-quality academic diagrams and statistical plots from text descriptions. Supports OpenAI (GPT-5.2 + GPT-Image-1.5), Azure OpenAI / Foundry, Google Gemini, and Atlas Cloud providers.
 
 - Two-phase multi-agent pipeline with iterative refinement
-- Multiple VLM and image generation providers (OpenAI, Azure, Gemini)
+- Multiple VLM and image generation providers (OpenAI, Azure, Gemini, Atlas Cloud)
 - Input optimization layer for better generation quality
 - Auto-refine mode and run continuation with user feedback
 - CLI, Python API, and MCP server for IDE integration
+- **Batch generation** from a manifest file (YAML/JSON) for multiple diagrams in one run
+- **Batch plots** — `paperbanana plot-batch` runs many statistical plots from one manifest (CSV/JSON per item)
+- **PDF inputs** for methodology context (optional `paperbanana[pdf]` / PyMuPDF), with per-page selection
+- **PaperBanana Studio** — local Gradio web UI (`paperbanana studio`) for diagrams, plots, evaluation, batch, and run browser
 - Claude Code skills for `/generate-diagram`, `/generate-plot`, and `/evaluate-diagram`
 
 <p align="center">
   <img src="assets/img/hero_image.png" alt="PaperBanana takes paper as input and provide diagram as output" style="max-width: 960px; width: 100%; height: auto;"/>
 </p>
+
+## Atlas Cloud
+
+<p align="center">
+  <img src="assets/sponsors/atlas_cloud_logo.png" alt="Atlas Cloud Logo" width="180"/>
+</p>
+
+Atlas Cloud is a full-modal AI inference platform that gives developers a single AI API to access video generation, image generation, and LLM APIs. Instead of managing multiple vendor integrations, you connect once and get unified access to 300+ curated models across all modalities.
+
+Check out Atlas Cloud's new coding plan promotion for more budget-friendly API access:
+[https://www.atlascloud.ai/console/coding-plan](https://www.atlascloud.ai/console/coding-plan)
 
 ---
 
@@ -75,9 +90,15 @@ pip install -e ".[dev,openai,google]"
 cp .env.example .env
 # Edit .env and add your API key:
 #   OPENAI_API_KEY=your-key-here
+#   GOOGLE_API_KEY=your-key-here
 #
 # For Azure OpenAI / Foundry:
 #   OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1
+#
+# Optional Gemini overrides:
+#   GOOGLE_BASE_URL=https://your-gemini-proxy.example.com
+#   GOOGLE_VLM_MODEL=gemini-2.0-flash
+#   GOOGLE_IMAGE_MODEL=gemini-3-pro-image-preview
 ```
 
 Or use the setup wizard for Gemini:
@@ -104,6 +125,17 @@ paperbanana generate \
 ```
 
 Output is saved to `outputs/run_<timestamp>/final_output.png` along with all intermediate iterations and metadata.
+
+### PaperBanana Studio (local web UI)
+
+Install the optional Gradio dependency, then start the app:
+
+```bash
+pip install 'paperbanana[studio]'
+paperbanana studio
+```
+
+Open the URL shown in the terminal (default `http://127.0.0.1:7860/`). The Studio exposes the same workflows as the CLI: methodology diagrams, statistical plots, comparative evaluation, continuing a prior run, batch manifests (methodology or **plot** batch via the Batch tab), and a simple browser for `run_*` / `batch_*` output folders. Use `--host`, `--port`, `--config`, and `--output-dir` as needed.
 
 ---
 
@@ -137,11 +169,37 @@ PaperBanana supports multiple VLM and image generation providers:
 |-----------|----------|-------|-------|
 | VLM (planning, critique) | OpenAI | `gpt-5.2` | Default |
 | Image Generation | OpenAI | `gpt-image-1.5` | Default |
+| VLM | Atlas Cloud | `deepseek-ai/DeepSeek-V3-0324` | OpenAI-compatible chat endpoint |
+| Image Generation | Atlas Cloud | `openai/gpt-image-2/text-to-image` | Async prediction API |
 | VLM | Google Gemini | `gemini-2.0-flash` | Free tier |
 | Image Generation | Google Gemini | `gemini-3-pro-image-preview` | Free tier |
 | VLM / Image | OpenRouter | Any supported model | Flexible routing |
 
 Azure OpenAI / Foundry endpoints are auto-detected — set `OPENAI_BASE_URL` to your endpoint.
+Gemini-compatible gateways are also supported — set `GOOGLE_BASE_URL` when needed.
+Atlas Cloud uses `ATLASCLOUD_BASE_URL=https://api.atlascloud.ai/v1` for chat and `ATLASCLOUD_IMAGE_BASE_URL=https://api.atlascloud.ai/api/v1` for image generation.
+
+Atlas Cloud official site:
+[https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=paperbanana](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=paperbanana)
+
+Recommended Atlas LLM models for `ATLASCLOUD_VLM_MODEL`:
+
+- `deepseek-ai/DeepSeek-V3-0324` (default)
+- `openai/gpt-4o`
+- `openai/gpt-4.1`
+- `google/gemini-2.5-flash`
+- `anthropic/claude-sonnet-4.5-20250929`
+
+These are stable, generally available models verified against the Atlas Cloud API. The full, always-current model pool (300+ models) is documented on Atlas Cloud's own docs — see [https://www.atlascloud.ai/models](https://www.atlascloud.ai/models) — and any model id listed there can be passed via `ATLASCLOUD_VLM_MODEL`.
+
+Recommended Atlas image models for `ATLASCLOUD_IMAGE_MODEL`:
+
+- `openai/gpt-image-2/text-to-image`
+- `openai/gpt-image-2/edit`
+- `baidu/ERNIE-Image-Turbo/text-to-image`
+- `black-forest-labs/flux-dev`
+- `black-forest-labs/flux-schnell`
+- `qwen/qwen-image`
 
 ---
 
@@ -168,11 +226,17 @@ paperbanana generate --continue \
 # Continue a specific run
 paperbanana generate --continue-run run_20260218_125448_e7b876 \
   --iterations 3
+
+# PDF as input (install PyMuPDF: pip install 'paperbanana[pdf]')
+paperbanana generate \
+  --input paper.pdf \
+  --caption "Overview of our method" \
+  --pdf-pages "3-8"
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--input` | `-i` | Path to methodology text file (required for new runs) |
+| `--input` | `-i` | Path to methodology text file or PDF (required for new runs) |
 | `--caption` | `-c` | Figure caption / communicative intent (required for new runs) |
 | `--output` | `-o` | Output image path (default: auto-generated in `outputs/`) |
 | `--iterations` | `-n` | Number of Visualizer-Critic refinement rounds (default: 3) |
@@ -182,6 +246,7 @@ paperbanana generate --continue-run run_20260218_125448_e7b876 \
 | `--continue` | | Continue from the latest run in `outputs/` |
 | `--continue-run` | | Continue from a specific run ID |
 | `--feedback` | | User feedback for the critic when continuing a run |
+| `--pdf-pages` | | PDF input only: 1-based pages (e.g. `1-5`, `2,4,6-8`; default: all) |
 | `--vlm-provider` | | VLM provider name (default: `openai`) |
 | `--vlm-model` | | VLM model name (default: `gpt-5.2`) |
 | `--image-provider` | | Image gen provider (default: `openai_imagen`) |
@@ -189,6 +254,7 @@ paperbanana generate --continue-run run_20260218_125448_e7b876 \
 | `--format` | `-f` | Output format: `png`, `jpeg`, or `webp` (default: `png`) |
 | `--config` | | Path to YAML config file (see `configs/config.yaml`) |
 | `--verbose` | `-v` | Show detailed agent progress and timing |
+| `--progress-json` | | Emit JSON progress events to stdout during generation |
 
 ### `paperbanana plot` -- Statistical Plots
 
@@ -204,6 +270,191 @@ paperbanana plot \
 | `--intent` | | Communicative intent for the plot (required) |
 | `--output` | `-o` | Output image path |
 | `--iterations` | `-n` | Refinement iterations (default: 3) |
+
+### `paperbanana batch` -- Batch Generation
+
+Generate multiple methodology diagrams from a single manifest file (YAML or JSON). Each item runs the full pipeline; outputs are written under `outputs/batch_<id>/run_<id>/` and a `batch_report.json` summarizes all runs.
+
+```bash
+paperbanana batch --manifest examples/batch_manifest.yaml --optimize
+```
+
+Manifest format (YAML or JSON with an `items` list):
+
+```yaml
+items:
+  - input: path/to/method1.txt
+    caption: "Overview of our encoder-decoder"
+    id: fig1
+  - input: method2.txt
+    caption: "Training pipeline"
+    id: fig2
+  - input: paper.pdf
+    caption: "System overview"
+    id: fig3
+    pdf_pages: "4-9" # optional; PDF inputs only
+```
+
+Paths in the manifest are resolved relative to the manifest file's directory.
+
+**Composite figures:** Add an optional `composite` section to automatically stitch all generated panels into a single labeled figure after the batch completes:
+
+```yaml
+composite:
+  layout: "1x3"          # rows x cols, or "auto"
+  labels: auto            # (a), (b), (c)... or explicit list, or null
+  spacing: 20             # pixels between panels
+  label_position: bottom  # top or bottom
+  output: "composite.png"
+
+items:
+  - input: method_encoder.txt
+    caption: "Encoder architecture"
+    id: panel_a
+  # ...
+```
+
+The composite image is saved alongside the individual panels in the batch output directory. See `examples/composite_batch_manifest.yaml` for a complete example.
+
+**Generate a human-readable report** from an existing batch run (Markdown or HTML):
+
+```bash
+paperbanana batch-report --batch-dir outputs/batch_20250109_123456_abc --format markdown
+# or by batch ID (under default output dir)
+paperbanana batch-report --batch-id batch_20250109_123456_abc --format html --output report.html
+```
+
+Diagram batch reports include `batch_kind: methodology`; plot batches use `batch_kind: statistical_plot`. Human-readable reports (`paperbanana batch-report`) show the batch kind when present.
+
+**Sweep manifests** let you store the full sweep plan as YAML/JSON instead of eight comma-separated CLI flags. Mutually exclusive with the axis flags; see `examples/sweep_manifest.yaml`.
+
+```bash
+paperbanana sweep --manifest examples/sweep_manifest.yaml
+```
+
+**Sweep reports** produced by `paperbanana sweep` can be rendered the same way:
+
+```bash
+paperbanana sweep-report --sweep-dir outputs/sweep_20250109_123456_abc --format html
+# or by sweep ID
+paperbanana sweep-report --sweep-id sweep_20250109_123456_abc --format markdown
+```
+
+Rendered sweep reports include a summary, a top-5 ranked table, the full variants table (with per-variant provider/model, iterations, critic-suggestion count, proxy score, and output path), and the `quality_proxy_score` note. Dry-run reports render a simplified "Planned Variants" section.
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--manifest` | `-m` | Path to manifest file (required) |
+| `--output-dir` | `-o` | Parent directory for batch run (default: outputs) |
+| `--config` | | Path to config YAML |
+| `--iterations` | `-n` | Refinement iterations per item |
+| `--optimize` | | Preprocess inputs for each item |
+| `--auto` | | Loop until critic satisfied per item |
+| `--format` | `-f` | Output image format (png, jpeg, webp) |
+| `--auto-download-data` | | Download expanded reference set if needed |
+
+### `paperbanana plot-batch` -- Batch Statistical Plots
+
+Generate multiple plots from a manifest (YAML or JSON). Each item specifies a **data** file (CSV or JSON) and an **intent** string, mirroring `paperbanana plot`. Outputs live under `outputs/batch_<id>/run_<id>/` with the same `batch_report.json` and `paperbanana batch-report` workflow as diagram batches.
+
+```bash
+paperbanana plot-batch --manifest examples/plot_batch_manifest.yaml --optimize
+```
+
+Manifest format (`items` list):
+
+```yaml
+items:
+  - data: path/to/results.csv
+    intent: "Bar chart comparing accuracy across models"
+    id: fig_acc
+  - data: other.json
+    intent: "Scatter plot with trend line"
+    aspect_ratio: "16:9"   # optional per item; CLI --aspect-ratio is the default when omitted
+```
+
+Paths are resolved relative to the manifest file’s directory.
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--manifest` | `-m` | Path to manifest (required) |
+| `--output-dir` | `-o` | Parent directory for `batch_*` (default: outputs) |
+| `--config` | | Path to config YAML |
+| `--vlm-provider` | | VLM provider (default: gemini) |
+| `--vlm-model` | | VLM model override |
+| `--image-provider` | | Image gen provider |
+| `--image-model` | | Image gen model |
+| `--iterations` | `-n` | Refinement iterations per item |
+| `--auto` | | Loop until critic satisfied per item |
+| `--max-iterations` | | Safety cap for `--auto` |
+| `--optimize` | | Input optimization per item |
+| `--format` | `-f` | png, jpeg, or webp |
+| `--save-prompts` / `--no-save-prompts` | | Persist prompts (default: on, same as `plot`) |
+| `--venue` | | Venue style (neurips, icml, acl, ieee, custom) |
+| `--aspect-ratio` | `-ar` | Default aspect ratio when not set in the manifest |
+| `--verbose` | `-v` | Verbose logging |
+
+### `paperbanana orchestrate` -- Full-Paper Figure Package
+
+Generate a publication-focused figure bundle from a full paper source, with optional data-driven plots. The command:
+- parses the paper (`.txt`, `.md`, or `.pdf`)
+- plans multiple methodology figures from section structure
+- optionally discovers CSV/JSON files to plan statistical plots
+- runs generation for all planned items
+- writes a package folder containing `figure_package.json`, `figures/`, `figures.tex`, and `captions.md`
+
+```bash
+paperbanana orchestrate \
+  --paper paper.pdf \
+  --data-dir ./results \
+  --max-method-figures 4 \
+  --max-plot-figures 3 \
+  --optimize
+```
+
+Use `--dry-run` to only plan and inspect `orchestration_plan.json` without API calls.
+Use `--resume-orchestrate <id-or-path>` to continue an interrupted orchestration from checkpoint state.
+
+| Flag | Description |
+|------|-------------|
+| `--paper` / `-p` | Paper source path (`.txt`, `.md`, or `.pdf`) |
+| `--resume-orchestrate` | Resume an existing orchestration by ID or directory |
+| `--retry-failed` | When resuming, include previously failed tasks |
+| `--max-retries` | Extra retries per task after first failure |
+| `--data-dir` | Optional directory containing CSV/JSON files for plot planning |
+| `--output-dir` / `-o` | Parent output directory (creates `orchestrate_*`) |
+| `--max-method-figures` | Max methodology figures to plan/generate |
+| `--max-plot-figures` | Max plot figures to plan/generate |
+| `--pdf-pages` | PDF-only page selection (e.g. `1-5`, `2,4,6-8`) |
+| `--optimize` | Enable input optimization for generated items |
+| `--iterations` / `-n` | Refinement iterations per generated item |
+| `--auto` + `--max-iterations` | Critic-driven auto-refine mode with safety cap |
+| `--concurrency` | Parallel figure generation workers |
+| `--format` / `-f` | Output format (`png`, `jpeg`, `webp`) |
+| `--dry-run` | Plan package only; no generation calls |
+
+### `paperbanana composite` -- Compose Multi-Panel Figures
+
+Stitch multiple images into a single labeled figure with `(a)`, `(b)`, `(c)` sub-panel labels:
+
+```bash
+paperbanana composite \
+  panel_a.png panel_b.png panel_c.png \
+  --layout 1x3 \
+  --output figure2.png
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `IMAGES` | | Positional: paths to images to compose |
+| `--layout` | `-l` | Grid layout: `RxC` (e.g. `1x3`, `2x2`) or `auto` (default: auto) |
+| `--labels` | | Comma-separated labels, or `none` to disable (default: auto `(a),(b),...`) |
+| `--spacing` | `-s` | Pixel spacing between panels (default: 20) |
+| `--label-position` | | `top` or `bottom` (default: bottom) |
+| `--label-font-size` | | Font size for labels (default: 32) |
+| `--output` | `-o` | Output path (default: composite_output.png) |
+
+This command works on any existing images — no API calls needed. It is also triggered automatically when a batch manifest includes a `composite` section (see `paperbanana batch` above).
 
 ### `paperbanana evaluate` -- Quality Assessment
 
@@ -221,12 +472,31 @@ paperbanana evaluate \
 |------|-------|-------------|
 | `--generated` | `-g` | Path to generated image (required) |
 | `--reference` | `-r` | Path to human reference image (required) |
-| `--context` | | Path to source context text file (required) |
+| `--context` | | Path to source context text file or PDF (required) |
 | `--caption` | `-c` | Figure caption (required) |
+| `--pdf-pages` | | PDF context only: 1-based page selection (default: all) |
 
 Scores on 4 dimensions (hierarchical aggregation per the paper):
 - **Primary**: Faithfulness, Readability
 - **Secondary**: Conciseness, Aesthetics
+
+### `paperbanana studio` -- Local web UI
+
+Requires `pip install 'paperbanana[studio]'` (Gradio).
+
+```bash
+paperbanana studio
+paperbanana studio --port 8080 --output-dir ./my_outputs
+```
+
+| Flag | Description |
+|------|-------------|
+| `--host` | Bind address (default `127.0.0.1`) |
+| `--port` | Port (default `7860`) |
+| `--share` | Create a temporary public Gradio link (do not use with sensitive data) |
+| `--config` | Path to YAML config |
+| `--output-dir` / `-o` | Default output directory for runs |
+| `--root-path` | URL subpath when behind a reverse proxy |
 
 ### `paperbanana setup` -- First-Time Configuration
 
@@ -234,7 +504,8 @@ Scores on 4 dimensions (hierarchical aggregation per the paper):
 paperbanana setup
 ```
 
-Interactive wizard that walks you through obtaining a Google Gemini API key and saving it to `.env`.
+Interactive wizard that first asks whether to use the official Gemini API.
+If you choose official API, it follows the default AI Studio key flow; if not, it asks for a custom Gemini-compatible URL and API key.
 
 ---
 
@@ -266,6 +537,8 @@ result = asyncio.run(pipeline.generate(
 
 print(f"Output: {result.image_path}")
 ```
+
+**Progress callbacks:** `generate()` and `continue_run()` accept an optional `progress_callback` argument. The pipeline invokes it with `PipelineProgressEvent` objects (stage, message, seconds, iteration, extra) at each step (optimizer, retriever, planner, stylist, visualizer, critic), so you can show progress in UIs or log timing without patching agents.
 
 To continue a previous run:
 
@@ -300,7 +573,7 @@ PaperBanana includes an MCP server for use with Claude Code, Cursor, or any MCP-
 }
 ```
 
-Three MCP tools are exposed: `generate_diagram`, `generate_plot`, and `evaluate_diagram`.
+MCP tools include `generate_diagram`, `continue_run` (resume a prior `run_*` with optional feedback), `generate_plot`, `evaluate_diagram`, and `evaluate_plot`.
 
 The repo also ships with 3 Claude Code skills:
 - `/generate-diagram <file> [caption]` - generate a methodology diagram from a text file
@@ -326,11 +599,11 @@ Key settings:
 
 ```yaml
 vlm:
-  provider: openai           # openai, gemini, or openrouter
+  provider: openai           # openai, atlas, gemini, or openrouter
   model: gpt-5.2
 
 image:
-  provider: openai_imagen    # openai_imagen, google_imagen, or openrouter_imagen
+  provider: openai_imagen    # openai_imagen, atlas_imagen, google_imagen, or openrouter_imagen
   model: gpt-image-1.5
 
 pipeline:
@@ -359,8 +632,18 @@ OPENAI_BASE_URL=https://api.openai.com/v1    # or Azure endpoint
 OPENAI_VLM_MODEL=gpt-5.2                      # override model
 OPENAI_IMAGE_MODEL=gpt-image-1.5              # override model
 
+# Atlas Cloud
+ATLASCLOUD_API_KEY=your-key
+ATLASCLOUD_BASE_URL=https://api.atlascloud.ai/v1
+ATLASCLOUD_VLM_MODEL=deepseek-ai/DeepSeek-V3-0324
+ATLASCLOUD_IMAGE_BASE_URL=https://api.atlascloud.ai/api/v1
+ATLASCLOUD_IMAGE_MODEL=openai/gpt-image-2/text-to-image
+
 # Google Gemini (alternative, free)
 GOOGLE_API_KEY=your-key
+GOOGLE_BASE_URL=                            # optional custom Gemini-compatible endpoint
+GOOGLE_VLM_MODEL=gemini-2.0-flash          # override Gemini VLM model
+GOOGLE_IMAGE_MODEL=gemini-3-pro-image-preview  # override Gemini image model
 ```
 
 ---
@@ -373,8 +656,8 @@ paperbanana/
 │   ├── core/          # Pipeline orchestration, types, config, resume, utilities
 │   ├── agents/        # Optimizer, Retriever, Planner, Stylist, Visualizer, Critic
 │   ├── providers/     # VLM and image gen provider implementations
-│   │   ├── vlm/       # OpenAI, Gemini, OpenRouter VLM providers
-│   │   └── image_gen/ # OpenAI, Gemini, OpenRouter image gen providers
+│   │   ├── vlm/       # OpenAI, Atlas Cloud, Gemini, OpenRouter VLM providers
+│   │   └── image_gen/ # OpenAI, Atlas Cloud, Gemini, OpenRouter image gen providers
 │   ├── reference/     # Reference set management (13 curated examples)
 │   ├── guidelines/    # Style guidelines loader
 │   └── evaluation/    # VLM-as-Judge evaluation system
