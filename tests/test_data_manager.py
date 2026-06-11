@@ -372,3 +372,40 @@ class TestClear:
 
     def test_clear_noop_when_empty(self, tmp_cache):
         tmp_cache.clear()  # should not raise
+
+
+class TestResolveImageUnicode:
+    """NFD-extracted filenames must still resolve (issue #234)."""
+
+    def test_nfd_filename_resolves_via_nfc_comparison(self, tmp_path):
+        import unicodedata
+
+        from paperbanana.data.manager import _resolve_image
+
+        images = tmp_path / "images"
+        images.mkdir()
+        # Name with U+2011 (non-breaking hyphen), written in NFD form as
+        # macOS zip extraction produces.
+        name_nfc = "VTON‑VLLM Aligning Modéls_diagram.jpg"
+        nfd_name = unicodedata.normalize("NFD", name_nfc)
+        (images / nfd_name).write_bytes(b"fake")
+
+        resolved = _resolve_image(images, name_nfc)
+        assert resolved is not None
+        assert resolved.read_bytes() == b"fake"
+
+    def test_exact_match_still_preferred(self, tmp_path):
+        from paperbanana.data.manager import _resolve_image
+
+        images = tmp_path / "images"
+        images.mkdir()
+        (images / "plain.jpg").write_bytes(b"x")
+        resolved = _resolve_image(images, "plain.jpg")
+        assert resolved == images / "plain.jpg"
+
+    def test_missing_image_returns_none(self, tmp_path):
+        from paperbanana.data.manager import _resolve_image
+
+        images = tmp_path / "images"
+        images.mkdir()
+        assert _resolve_image(images, "nope.jpg") is None

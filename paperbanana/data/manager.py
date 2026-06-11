@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import tempfile
+import unicodedata
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -351,6 +352,29 @@ def _merge_index(index_path: Path, new_examples: list[dict]) -> int:
     return len(merged)
 
 
+def _resolve_image(source_images_dir: Path, gt_image_rel: str) -> Optional[Path]:
+    """Resolve a dataset image path tolerantly across Unicode normalization forms.
+
+    macOS extracts zip entries with NFD-normalized filenames, so a byte-exact
+    lookup misses names containing characters like U+2011 (non-breaking hyphen)
+    or U+200C (zero-width non-joiner). When the exact paths miss, fall back to
+    an NFC-normalized filename comparison within the candidate directories.
+    """
+    candidates = [source_images_dir / gt_image_rel, source_images_dir.parent / gt_image_rel]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    want = unicodedata.normalize("NFC", Path(gt_image_rel).name)
+    for candidate in candidates:
+        parent = candidate.parent
+        if not parent.is_dir():
+            continue
+        for f in parent.iterdir():
+            if unicodedata.normalize("NFC", f.name) == want:
+                return f
+    return None
+
+
 def _import_from_bench(
     bench_dir: Path,
     task: str,
@@ -412,11 +436,9 @@ def _import_from_bench(
             if not gt_image_rel:
                 continue
 
-            source_image = source_images_dir / gt_image_rel
-            if not source_image.exists():
-                source_image = source_images_dir.parent / gt_image_rel
-            if not source_image.exists():
-                logger.warning("Image not found, skipping", id=entry_id, path=str(source_image))
+            source_image = _resolve_image(source_images_dir, gt_image_rel)
+            if source_image is None:
+                logger.warning("Image not found, skipping", id=entry_id, path=gt_image_rel)
                 continue
 
             dest_filename = f"{entry_id}.jpg"
