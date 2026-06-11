@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json as json_mod
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -237,6 +238,14 @@ def generate(
         None, "--caption", "-c", help="Figure caption / communicative intent"
     ),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output image path"),
+    output_dir: Optional[str] = typer.Option(
+        None,
+        "--output-dir",
+        help=(
+            "Directory for run outputs; also where --continue/--continue-run "
+            "look up the existing run"
+        ),
+    ),
     vlm_provider: Optional[str] = typer.Option(
         None, "--vlm-provider", help="VLM provider (gemini)"
     ),
@@ -473,6 +482,9 @@ def generate(
         overrides["save_prompts"] = save_prompts
     if output:
         overrides["output_dir"] = str(Path(output).parent)
+    if output_dir:
+        # Explicit --output-dir wins over the directory inferred from --output.
+        overrides["output_dir"] = output_dir
     overrides["output_format"] = format
     if vector:
         overrides["vector_export"] = True
@@ -534,20 +546,36 @@ def generate(
     if continue_run is not None or continue_last:
         from paperbanana.core.resume import find_latest_run, load_resume_state
 
+        resume_output_dir = settings.output_dir
         if continue_run:
-            run_id = continue_run
+            if "/" in continue_run or os.sep in continue_run:
+                # --continue-run was given as a path to the run directory itself.
+                run_path = Path(continue_run).expanduser()
+                if not run_path.is_dir():
+                    console.print(
+                        f"[red]Error: Run directory not found: {run_path.resolve()}[/red]"
+                    )
+                    raise typer.Exit(1)
+                resume_output_dir = str(run_path.parent)
+                run_id = run_path.name
+            else:
+                run_id = continue_run
         else:
             try:
-                run_id = find_latest_run(settings.output_dir)
+                run_id = find_latest_run(resume_output_dir)
                 console.print(f"  [dim]Using latest run:[/dim] [bold]{run_id}[/bold]")
             except FileNotFoundError as e:
                 console.print(f"[red]Error: {e}[/red]")
                 raise typer.Exit(1)
 
         try:
-            resume_state = load_resume_state(settings.output_dir, run_id)
+            resume_state = load_resume_state(resume_output_dir, run_id)
         except (FileNotFoundError, ValueError) as e:
             console.print(f"[red]Error: {e}[/red]")
+            console.print(
+                "[dim]Hint: if the run lives outside the default output directory, "
+                "pass --output-dir <dir> or --continue-run <path/to/run_dir>.[/dim]"
+            )
             raise typer.Exit(1)
 
         iter_label = "auto" if auto else str(iterations or settings.refinement_iterations)

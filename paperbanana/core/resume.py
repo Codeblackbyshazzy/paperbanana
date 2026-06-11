@@ -28,13 +28,13 @@ def find_latest_run(output_dir: str) -> str:
     """
     out = Path(output_dir)
     if not out.exists():
-        raise FileNotFoundError(f"Output directory not found: {output_dir}")
+        raise FileNotFoundError(f"Output directory not found: {out.resolve()}")
 
     runs = sorted(
         [d.name for d in out.iterdir() if d.is_dir() and d.name.startswith("run_")],
     )
     if not runs:
-        raise FileNotFoundError(f"No runs found in {output_dir}")
+        raise FileNotFoundError(f"No runs found in {out.resolve()}")
 
     return runs[-1]
 
@@ -70,7 +70,10 @@ def load_resume_state(output_dir: str, run_id: str) -> ResumeState:
     """
     run_dir = Path(output_dir) / run_id
     if not run_dir.exists():
-        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+        raise FileNotFoundError(
+            f"Run directory not found: {run_dir.resolve()} "
+            f"(looked for run '{run_id}' under output dir '{Path(output_dir).resolve()}')"
+        )
 
     # Load original input
     input_path = run_dir / "run_input.json"
