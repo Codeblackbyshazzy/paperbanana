@@ -83,7 +83,7 @@ def load_resume_state(output_dir: str, run_id: str) -> ResumeState:
             f"Only runs created with PaperBanana >= 0.2.0 can be continued."
         )
 
-    with open(input_path) as f:
+    with open(input_path, encoding="utf-8") as f:
         run_input = json.load(f)
 
     # Find the latest iteration
@@ -97,7 +97,7 @@ def load_resume_state(output_dir: str, run_id: str) -> ResumeState:
         planning_path = run_dir / "planning.json"
         if not planning_path.exists():
             raise ValueError(f"No iterations or planning.json found in {run_dir}")
-        with open(planning_path) as f:
+        with open(planning_path, encoding="utf-8") as f:
             planning = json.load(f)
         last_description = planning.get("optimized_description", "")
         last_iteration = 0
@@ -107,7 +107,7 @@ def load_resume_state(output_dir: str, run_id: str) -> ResumeState:
         last_iteration = int(last_iter_dir.name.split("_")[1])
         details_path = last_iter_dir / "details.json"
 
-        with open(details_path) as f:
+        with open(details_path, encoding="utf-8") as f:
             details = json.load(f)
 
         critique = details.get("critique", {})
@@ -135,7 +135,7 @@ def load_resume_state(output_dir: str, run_id: str) -> ResumeState:
     planner_ratio = None
     planning_path = run_dir / "planning.json"
     if planning_path.exists():
-        with open(planning_path) as f:
+        with open(planning_path, encoding="utf-8") as f:
             planning = json.load(f)
         planner_ratio = planning.get("planner_recommended_ratio")
     aspect_ratio = user_ratio or planner_ratio
