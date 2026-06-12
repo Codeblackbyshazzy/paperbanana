@@ -36,7 +36,8 @@ _API_KEY_HINTS = {
     "ATLASCLOUD_API_KEY": (
         "ATLASCLOUD_API_KEY not found.\n\n"
         "To fix this:\n"
-        "  1. Get an API key at: https://www.atlascloud.ai/console/api-keys\n"
+        "  1. Get an API key at: "
+        "https://www.atlascloud.ai/console/api-keys?utm_source=github&utm_medium=link&utm_campaign=paperbanana\n"
         "  2. Set the environment variable:\n\n"
         "  export ATLASCLOUD_API_KEY=your-key-here"
     ),
